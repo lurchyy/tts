@@ -4,15 +4,13 @@ import tempfile
 from pathlib import Path
 from tts import EdgeTTSWithAccents
 
-# Set page config
 st.set_page_config(
-    page_title="Text-to-Speech with Accents",
+    page_title="Text-to-Speech",
     page_icon="🎙️",
     layout="wide"
 )
 
 
-# Initialize TTS engine
 @st.cache_resource
 def get_tts_engine():
     return EdgeTTSWithAccents()
@@ -20,32 +18,27 @@ def get_tts_engine():
 
 tts_engine = get_tts_engine()
 
-# Title and description
-st.title("🎙️ Text-to-Speech with Accents")
+st.title(" Text-to-Speech")
 st.markdown("""
 Convert your text to speech with various English accents using Microsoft Edge TTS.
 Select your preferred accent, gender, and voice to generate natural-sounding speech.
 """)
 
-# Sidebar for settings
 with st.sidebar:
     st.header("Settings")
-    
-    # Accent selection
+
     accent = st.selectbox(
         "Select Accent",
         options=list(tts_engine.available_accents.keys()),
         index=0
     )
-    
-    # Gender selection
+
     gender = st.selectbox(
         "Select Gender",
         options=["Male", "Female"],
         index=1
     )
-    
-    # Voice selection based on accent and gender
+
     voices = tts_engine.available_accents[accent][gender]
     voice = st.selectbox(
         "Select Voice",
@@ -53,22 +46,19 @@ with st.sidebar:
         index=0
     )
 
-# Main content area
 text_input = st.text_area(
     "Enter your text here",
     height=150,
     placeholder="Type or paste the text you want to convert to speech..."
 )
 
-# Generate button
 if st.button("Generate Speech"):
     if text_input.strip():
         with st.spinner("Generating speech..."):
-            # Create a temporary file for the audio
+        
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
                 temp_path = Path(temp_file.name)
-                
-                # Convert text to speech
+            
                 output_file = asyncio.run(
                     tts_engine.convert_text_to_speech(
                         text=text_input,
@@ -81,11 +71,9 @@ if st.button("Generate Speech"):
                 
                 if output_file:
                     st.success("Speech generated successfully!")
-                    
-                    # Display audio player
+                
                     st.audio(str(temp_path))
-                    
-                    # Download button
+                
                     with open(str(temp_path), "rb") as f:
                         st.download_button(
                             label="Download Audio",
@@ -98,10 +86,8 @@ if st.button("Generate Speech"):
     else:
         st.warning("Please enter some text to convert to speech.")
 
-# Footer
 st.markdown("---")
 st.markdown("""
-### About
 This app uses Microsoft Edge TTS to generate high-quality speech with various English accents.
 The generated audio files are in MP3 format and can be downloaded for offline use.
 """) 
