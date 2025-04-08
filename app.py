@@ -284,4 +284,4 @@ with gr.Blocks(title="Text-to-Speech", theme=gr.themes.Soft()) as app:
 
 # Launch the app
 if __name__ == "__main__":
-    app.launch(share=True)
+    app.launch(server_name="0.0.0.0", server_port=7860)
