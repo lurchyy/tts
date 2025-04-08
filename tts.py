@@ -1,5 +1,5 @@
-#!pip install edge-tts
-#!pip install nltk
+# !pip install edge-tts
+# !pip install nltk
 import os
 import sys
 import argparse
@@ -120,7 +120,6 @@ class EdgeTTSWithAccents:
         else:
 
             voices = await self.get_available_voices()
-            
 
             table = Table(title="Available Accents and Voices")
             table.add_column("Accent", style="cyan")
@@ -198,7 +197,6 @@ class EdgeTTSWithAccents:
         try:
 
             communicate = self.edge_tts.Communicate(text, voice)
-            
 
             with Progress() as progress:
                 task = progress.add_task("[green]Generating speech...", total=100)
@@ -225,7 +223,6 @@ class EdgeTTSWithAccents:
             pygame.mixer.init()
             pygame.mixer.music.load(file_path)
             pygame.mixer.music.play()
-            
 
             console.print("Playing audio... Press Ctrl+C to stop.")
             try:
@@ -257,6 +254,53 @@ class EdgeTTSWithAccents:
             replay_choice = Prompt.ask("[bold]Replay the audio?[/bold]", choices=["y", "n"], default="n")
             replay = replay_choice.lower() == "y"
 
+    async def stream_text_to_speech(self, text, accent, gender=None, voice_index=0):
+        """Stream text to speech as it's being entered"""
+        if accent not in self.available_accents:
+            console.print(f"[bold red]Error:[/bold red] Invalid accent '{accent}'. Please choose from available accents.")
+            await self.list_available_accents()
+            return False
+            
+        if gender:
+            voices = self.available_accents[accent].get(gender, [])
+            if not voices:
+                console.print(f"[bold red]Error:[/bold red] No voices available for {gender} in {accent} accent.")
+                return False
+        else:
+            voices = []
+            for gender_voices in self.available_accents[accent].values():
+                voices.extend(gender_voices)
+            
+        if voice_index >= len(voices):
+            voice_index = 0
+            
+        voice = voices[voice_index]
+        
+        try:
+            # Create a temporary file for streaming
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+                temp_path = temp_file.name
+                
+            communicate = self.edge_tts.Communicate(text, voice)
+            
+            # Start streaming the audio
+            await communicate.save(temp_path)
+            
+            # Play the audio immediately
+            await self.play_audio(temp_path)
+            
+            # Clean up the temporary file
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+                
+            return True
+            
+        except Exception as e:
+            console.print(f"[bold red]Error generating speech: {str(e)}[/bold red]")
+            return False
+
 
 async def main_async():
     parser = argparse.ArgumentParser(description="Text-to-Speech with multiple English accents using Edge TTS")
@@ -269,6 +313,7 @@ async def main_async():
     parser.add_argument("--detailed", action="store_true", help="Show detailed voice information")
     parser.add_argument("--list-all", action="store_true", help="List all available voices")
     parser.add_argument("--play", action="store_true", help="Play the generated audio after conversion")
+    parser.add_argument("--stream", action="store_true", help="Stream text input and play audio in real-time")
     
     args = parser.parse_args()
     
@@ -283,9 +328,12 @@ async def main_async():
         return
         
     if args.text and args.accent:
-        output_file = await tts_engine.convert_text_to_speech(args.text, args.accent, args.gender, args.voice, args.output)
-        if output_file and args.play:
-            await tts_engine.replay_audio(output_file)
+        if args.stream:
+            await tts_engine.stream_text_to_speech(args.text, args.accent, args.gender, args.voice)
+        else:
+            output_file = await tts_engine.convert_text_to_speech(args.text, args.accent, args.gender, args.voice, args.output)
+            if output_file and args.play:
+                await tts_engine.replay_audio(output_file)
     else:
         console.print(Panel("Welcome to Edge TTS with Accents!",
                            title="Edge TTS Accent Generator", style="green"))
@@ -297,40 +345,64 @@ async def main_async():
             await tts_engine.list_available_accents(detailed=True)
         
         while True:
-            text = Prompt.ask("[bold]Enter text to convert[/bold] (or 'q' to quit)")
+            mode = Prompt.ask("[bold]Choose mode[/bold]",
+                            choices=["stream", "normal"],
+                            default="normal")
             
-            if text.lower() == 'q':
-                break
+            if mode == "stream":
+                console.print("[yellow]Enter text and press Enter to speak. Press Ctrl+C to stop.[/yellow]")
+                accent = Prompt.ask("[bold]Choose an accent[/bold]",
+                                  choices=list(tts_engine.available_accents.keys()))
+                gender = Prompt.ask("[bold]Choose voice gender[/bold]",
+                                  choices=["Male", "Female"],
+                                  default="Female")
+                voices = tts_engine.available_accents[accent][gender]
+                voice_idx = Prompt.ask("[bold]Choose voice index[/bold]",
+                                     choices=[str(i) for i in range(len(voices))],
+                                     default="0")
                 
-            accent = Prompt.ask("[bold]Choose an accent[/bold]",
-                                choices=list(tts_engine.available_accents.keys()))
+                try:
+                    while True:
+                        text = Prompt.ask("[bold]Enter text to speak[/bold] (or 'q' to quit)")
+                        if text.lower() == 'q':
+                            break
+                        await tts_engine.stream_text_to_speech(text, accent, gender, int(voice_idx))
+                except KeyboardInterrupt:
+                    console.print("\n[yellow]Streaming stopped by user.[/yellow]")
+            else:
+                text = Prompt.ask("[bold]Enter text to convert[/bold] (or 'q' to quit)")
                 
-            gender = Prompt.ask("[bold]Choose voice gender[/bold]",
-                               choices=["Male", "Female"],
-                               default="Female")
-                
+                if text.lower() == 'q':
+                    break
+                    
+                accent = Prompt.ask("[bold]Choose an accent[/bold]",
+                                  choices=list(tts_engine.available_accents.keys()))
+                    
+                gender = Prompt.ask("[bold]Choose voice gender[/bold]",
+                                  choices=["Male", "Female"],
+                                  default="Female")
 
-            voices = tts_engine.available_accents[accent][gender]
-            console.print(f"[cyan]Available voices for {accent} ({gender}):[/cyan]")
-            for i, voice in enumerate(voices):
-                console.print(f"  {i}: {voice}")
+                voices = tts_engine.available_accents[accent][gender]
+                console.print(f"[cyan]Available voices for {accent} ({gender}):[/cyan]")
+                for i, voice in enumerate(voices):
+                    console.print(f"  {i}: {voice}")
+                    
+                voice_idx = Prompt.ask("[bold]Choose voice index[/bold]",
+                                     choices=[str(i) for i in range(len(voices))],
+                                     default="0")
+                    
+                output_file = await tts_engine.convert_text_to_speech(text, accent, gender, int(voice_idx))
                 
-            voice_idx = Prompt.ask("[bold]Choose voice index[/bold]",
-                                  choices=[str(i) for i in range(len(voices))],
-                                  default="0")
+                if output_file:
+                    play_choice = Prompt.ask("[bold]Play the audio?[/bold]", choices=["y", "n"], default="y")
+                    if play_choice.lower() == "y":
+                        await tts_engine.replay_audio(output_file)
                 
-            output_file = await tts_engine.convert_text_to_speech(text, accent, gender, int(voice_idx))
-            
-            if output_file:
-                play_choice = Prompt.ask("[bold]Play the audio?[/bold]", choices=["y", "n"], default="y")
-                if play_choice.lower() == "y":
-                    await tts_engine.replay_audio(output_file)
-            
-            continue_choice = Prompt.ask("[bold]Continue with another conversion?[/bold]",
-                                        choices=["y", "n"], default="y")
-            if continue_choice.lower() != "y":
-                break
-                
+                continue_choice = Prompt.ask("[bold]Continue with another conversion?[/bold]",
+                                          choices=["y", "n"], default="y")
+                if continue_choice.lower() != "y":
+                    break
+                    
     console.print(Panel("Thank you for using Edge TTS with Accents!",
                         title="Goodbye", style="green"))
 
