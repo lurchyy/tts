@@ -31,12 +31,12 @@ if 'processing' not in st.session_state:
     st.session_state.processing = False
 if 'last_processed' not in st.session_state:
     st.session_state.last_processed = 0
-if 'current_delay' not in st.session_state:
-    st.session_state.current_delay = 1.0
 if 'last_audio_path' not in st.session_state:
     st.session_state.last_audio_path = None
 if 'trigger_process' not in st.session_state:
     st.session_state.trigger_process = False
+if 'text_changed' not in st.session_state:
+    st.session_state.text_changed = False
 
 
 def trigger_processing():
@@ -47,6 +47,12 @@ def trigger_processing():
 def force_processing():
     st.session_state.trigger_process = True
     st.session_state.last_processed = 0  # Reset timer to force immediate processing
+
+
+# Detect text changes in real-time
+def on_text_change():
+    st.session_state.text_changed = True
+    st.session_state.trigger_process = True
 
 
 st.title(" Text-to-Speech")
@@ -92,24 +98,7 @@ with st.sidebar:
         help="Automatically play audio as you type"
     )
 
-    # Add delay slider
-    # Store the delay value in session state to avoid reprocessing on slider change
-    if 'delay_value' not in st.session_state:
-        st.session_state.delay_value = st.session_state.current_delay
-        
-    def update_delay():
-        st.session_state.current_delay = st.session_state.delay_value
-        
-    st.slider(
-        "Typing delay (seconds)",
-        min_value=0.5,
-        max_value=3.0,
-        value=st.session_state.current_delay,
-        step=0.1,
-        key="delay_value",
-        on_change=update_delay,
-        help="Delay before playing audio after typing"
-    )
+    # Delay slider removed as requested
 
 if mode == "Stream":
     st.markdown("### 🎙️ Streaming Mode")
@@ -121,20 +110,19 @@ if mode == "Stream":
         height=100,
         placeholder="Type or paste the text you want to convert to speech...",
         key="text_input",
-        on_change=trigger_processing
+        on_change=on_text_change
     )
     
     # Add control buttons
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("Stop Playback"):
             st.session_state.stop_playback = True
             st.session_state.is_playing = False
             st.warning("Playback stopped!")
     with col2:
-        if st.button("Process Now"):
-            force_processing()
-            st.rerun()
+        if st.button("Process Now", on_click=force_processing):
+            pass  # Processing handled by on_click
     with col3:
         if st.button("Replay Last Audio"):
             if st.session_state.last_audio_path and os.path.exists(st.session_state.last_audio_path):
@@ -156,19 +144,15 @@ if mode == "Stream":
                     st.error(f"Failed to replay audio: {str(e)}")
             else:
                 st.warning("No previous text to replay")
-    with col4:
-        if st.button("Clear Text"):
-            st.session_state.text_input = ""
-            st.experimental_rerun()
     
     # Check if text has changed and auto-play is enabled
     current_time = time.time()
     should_process = (
         (auto_play and 
          text_input != st.session_state.last_text and 
-         not st.session_state.processing and
-         current_time - st.session_state.last_processed > st.session_state.current_delay) or
-        st.session_state.trigger_process
+         not st.session_state.processing) or
+        st.session_state.trigger_process or
+        st.session_state.text_changed
     )
     
     if should_process and text_input.strip():
@@ -176,6 +160,7 @@ if mode == "Stream":
         st.session_state.processing = True
         st.session_state.last_processed = current_time
         st.session_state.trigger_process = False
+        st.session_state.text_changed = False
         
         # Create a progress bar
         progress_bar = st.progress(0)
